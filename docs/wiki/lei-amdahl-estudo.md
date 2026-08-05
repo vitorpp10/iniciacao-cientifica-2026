@@ -6,11 +6,11 @@
 
 `𝑠`: Fator de aceleração antigido especificamente para ganho de desempenho(speedup).
 
-`1-𝒇`: Fração sequencial que não pode ser alterada sempre deve ser feito ***Tempo Sequencial / Tempo Total***
+`1-𝒇`: Fração sequencial que não pode ser alterada sempre deve ser feito ***Tempo Sequencial / Tempo Total***.
 
-`𝒇/𝑠`: Fração modificável que pode ser melhorada dividindo também pelo tempo total ***Tempo Modificável / Tempo Total***
+`𝒇/𝑠`: Fração modificável que pode ser melhorada dividindo também pelo tempo total ***Tempo Modificável / Tempo Total***.
 
-``
+`𝑺 = 𝟏/(𝟏 - 𝒇) + 𝒇/𝒔`: Fórmula da lei de amdahl.
 
 ## *Lei de amdahl*
 
@@ -20,11 +20,9 @@ A lei de amdahl estabelece o limite teórico de ganho de desempenho(speedup) ao 
 
 $$S = \frac{1}{(1 - f) + \frac{f}{s}}$$
 
-<br>
-
-![formula-amdahl](../images/amdahl.png) 
-
-<br>
+<p align="center">
+  <img src="../images/amdahl.png" alt="Fórmula manuscrita da Lei de Amdahl" width="500">
+</p>
 
 Exemplo: *Yara vai de metrô para faculdade demorando cerca de 1h30. Quando ela sai do metrô ainda precisa ir caminhando, oque demora mais 20 minutos. Como podemos melhorar o tempo para a yara chegar na faculdade mais rápido?* 
 
@@ -45,10 +43,14 @@ Por exemplo, ao invês de ir caminhando na parte final do trajeto, ela decidiu i
 
 Veja o cálculo passo a passo aplicado à fórmula:
 
-<br>
+$$S = \frac{1}{(1 - 0.1818) + \frac{0.1818}{2}}$$
 
-![resolucao-exemplo-amdahl](../images/ex-amdahl.png)
+$$S = \frac{1}{0.8182 + 0.0909}$$
 
-<br>
+$$S = \frac{1}{0.9091} \approx 1.10$$
+
+<p align="center">
+  <img src="../images/ex-amdahl.png" alt="Resolução exemplo amdahl" width="500">
+</p>
 
 Com isso podemos concluir que o ganho de desempenho na rotina foi de **≅ 1.10x** e o maior gargalo continua sendo o **Tempo sequencial (Metrô)**. A lei de amdahl nos ajudou a concluir que o maior problema na rotina especificada é o metrô e podemos apenas melhorar **18.18% (0.1818)** dela.
