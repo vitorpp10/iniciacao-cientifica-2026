@@ -1,3 +1,9 @@
+# Semana 1 métricas com lei de amdahl 
+
+1. JOD: se p=40% e s=4x → S = ?
+2. Crypto: se p=70% e s=5x → S = ?
+3. Combinado (3 extensões): S = ?
+
 # Protocolo de Pesquisa
 
 > **Status:** A redigir na Semana 4 (22–28/ago/2026)
