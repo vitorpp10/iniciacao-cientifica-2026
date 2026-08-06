@@ -54,3 +54,41 @@ $$S = \frac{1}{0.9091} \approx 1.10$$
 </p>
 
 Com isso podemos concluir que o ganho de desempenho na rotina foi de **≅ 1.10x** e o maior gargalo continua sendo o **Tempo sequencial (Metrô)**. A lei de amdahl nos ajudou a concluir que o maior problema na rotina especificada é o metrô e podemos apenas melhorar **18.18% (0.1818)** dela.
+
+## *Testes Simulados*
+
+Agora que entendemos como a lei de amdahl, vamos simular a pesquisa ciéntifica para medir o quanto de ganho vai ter em cada rotina especifíca de cada módulo que o projeto vai ter. 
+
+### *1. Criptografia*
+
+Foi identificado por ferramentas de análise que a criptografia é o maior gargalo atual em questão de desempenho ocupando cerca de **70% do tempo total de execução**. Conseguimos uma aplicação que deixou a rotina* **5x** mais rápida:
+
+**`Fração modificável(𝒇)`: 0,70**
+
+**`Fator de aceleração(𝑠)`: 5**
+
+**`Fração sequencial(1-𝒇)`: 0,30**
+
+Fórmula aplicada:
+
+
+
+### *2. JOD*
+
+Este cenário analisa o impacto de otimizar o módulo JOD. Ele possui o menor peso menor sistema, sendo responsável por **40% do tempo total de execução**. O ganho de desempenho aplicada nessa rotina isolada foi de **4x**:
+
+**`Fração modificável(𝒇)`: 0,40**
+
+**`Fator de aceleração(𝑠)`: 4**
+
+**`Fração sequencial(1-𝒇)`: 0,60**
+
+Fórmula aplicada:
+
+
+### *3. Cenário aplicado*
+
+Aqui medimos o impacto global de aplicar as duas otimizações(*Criptografia e JOD*) juntas no mesmo sistema. Para este cálculo, as frações de tempo foram ajustadas para que a soma total feche em 100%. Será avaliado o ganho rodando a criptografia **5x** mais rápido e o módulo JOD **4x** mais rápido ao mesmo tempo: 
+
+Fórmula aplicada: 
+
