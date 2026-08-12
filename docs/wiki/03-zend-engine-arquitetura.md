@@ -129,3 +129,54 @@ ZEND_AST_RANGE,
 ```
 
 A partir de agora, ao rodar `1 |> 2;`, o código **não vai mais dar erro de sintaxe**. Agora o Lexer lê, o Parser valida a gramática, o AST monta o mapa visual porém o motor ainda não sabe oque fazer na hora de executar, que seria  fase de compilação/Zend VM, fazendo a compilação travar até o momento.
+
+## Compilation
+
+Agora que o Lexer, Parser e AST enxergam e sabem ler nosso operador `|>`, vamos compilar ele e fazer o PHP pegar o AST e percorrer o nó do nosso operador para gerar OpCodes que seria uma instrução de baixo nível para operações.
+
+Basicamente primeiro devemos entrar dentro do arquivo `Zend/zend_compiler.c`, especificamente na função `zend_compile_expr` que possui o switch principal do sistema interno do PHP que olha nós da AST e retorna valores. No caso do operador do autor, vamos criar um novo case para quando ele encontrar uma váriavel do tipo token `ZEND_AST_RANGE` ele entrar chamar uma função terciária que vamos criar para identificar as duas variáveis obrigatórias da nossa função e retorna um resultado, então o código inicial fica assim:
+
+```c
+case ZEND_AST_RANGE:
+zend_compile_range(result, ast);
+return;
+```
+
+Agora sempre que o compilador do PHP encontrar com um nó do tipo token `ZEND_AST_RANGE` ele vai chamar a função e jogar oque ele encontrou nela.
+
+Nossa função vai receber o resultado e o nó do compilador do PHP, onde vai funcionar em três passos:
+
+```c
+void zend_compile_range(znode *result, zend_ast *ast) {
+    zend_ast *left_ptr = ast->child[0];
+    zend_ast *right_ptr = ast->child[1];
+    znode left_node, right_node;
+zend_compile_expr(&left_node, left_ptr);
+zend_compile_expr(&right_node, right_ptr);
+zend_emit_op_tmp(result, ZEND_RANGE, &left_node, &right_node);
+}
+```
+
+- 1° Passo: Pega os dados separando o nó da esquerda (`child[0]`) com o nó da direita (`child[1]`).
+
+- 2° Passo: Ele chama a função `zend_compile_expr` para resolver os as variáveis dinâmicas que podem estar em ambos os lados do operador por exemplo `($a + 2 |> $minhaFuncao())`, ou seja, o PHP precisa compilar e resolver oque tem em cada lado primeiro.
+
+- 3° Passo: Junta as duas partes resolvidas (`left_node, right_node`) e cria uma instrução real chamada `ZEND_RANGE` usando a função `zend_emit_op_tmp`.
+
+`zend_ast`: É uma estrutura de árvore, representa o código em um formato visual e hierárquico.
+
+`znode`: Estrutura usada exclusivamente durante a compilação para traduzir a árvore em instruções de máquina.
+
+### OpCode
+
+Opcodes são instruções reais de operações que possuem dois valores operandos (`op1`, `op2`) e um valor para guardar o resultado (`result`). Existem vários tipos de nós opcodes (`znode`), entre os principais estão:
+
+**IS_CV**: Para valores comuns digitados pelo user (ex: `$a`), podem ser vistas no terminal com o comando `!0`.
+
+**IS_VAR**: Expressões complexas de valores (ex: `$objeto->propriedade`)
+
+**IS_CONST**: Valores literais fixos (ex: `2`, `"texto"` etc);
+
+**IS_TMP_VAR**: Valores temporários criados pelo PHP durante contas. Eles duram muito pouco tempo e servem apenas para passar dados de uma linha para a outra. Podem ser vistas no terminal com o comando `~0`.
+
+Então basicamente agora o PHP lê o código, monta a AST (Árvore de Sintaxe Abstrata) e gera os Opcodes necessários para compilar porém o Zend VM ainda não sabe oque é o `ZEND_RANGE`, então o programa vai travar.
