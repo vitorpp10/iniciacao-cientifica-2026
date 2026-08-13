@@ -180,3 +180,22 @@ Opcodes são instruções reais de operações que possuem dois valores operando
 **IS_TMP_VAR**: Valores temporários criados pelo PHP durante contas. Eles duram muito pouco tempo e servem apenas para passar dados de uma linha para a outra. Podem ser vistas no terminal com o comando `~0`.
 
 Então basicamente agora o PHP lê o código, monta a AST (Árvore de Sintaxe Abstrata) e gera os Opcodes necessários para compilar porém o Zend VM ainda não sabe oque é o `ZEND_RANGE`, então o programa vai travar.
+
+## Zend VM
+
+Agora que o nosso compilador sabe interpretar o nó `ZEND_AST_RANGE` e gerar o **OpCode** correspondente, precisamos ensinar a **Zend VM** a executá-lo. Para isso, criamos um *Handler* (manipulador).
+
+Se tentarmos rodar o **PHP** neste estágio, o programa vai travar (causando um *Segmentation Fault*), pois a **VM** (Máquina Virtual) vai ler a instrução `ZEND_RANGE`, mas não saberá como processar a lógica por trás dela em tempo de execução.
+
+O primeiro passo que deve ser feito para o reconhecimento é a assinatura do *handler* `ZEND_VM_HANDLER`:
+
+```c
+ZEND_VM_HANDLER(182, ZEND_RANGE, CONST|TMP|VAR|CV, CONST|TMP|VAR|CV) {}
+```
+
+Isso seria um pseudo-macro onde o arquivo `Zend/zend_vm_gen.php` vai ler o arquivo e gerar código **C** a partir dele.
+
+* `182`: ID numérico do **opcode** (geralmente o último número do arquivo `zend_vm_opcodes.h`).
+* `ZEND_RANGE`: Nome do **opcode**/instrução.
+* `CONST|TMP|VAR|CV`: Os tipos possíveis de dados que pode aparecer no `op1` (Esquerda).
+* `CONST|TMP|VAR|CV`: Mesma coisa, tipos possíveis porém para o outro lado `op2` (Direita).
