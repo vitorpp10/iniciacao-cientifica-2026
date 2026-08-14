@@ -1,14 +1,3 @@
-"""
-ler php-internals-book
-
-explicar fases que o zend engine faz para ler um código PHP, como ele faz isso as funções etc
-
-Lexing
-Parsing
-AST
-Compilation & OpCode
-"""
-
 # The Range Operator
 
 O operador do php chamado de *Range Operator (Operador de Alcance)* é um operador fictício testado no motor do PHP que é escrito em C para mostrar como alterar o **Lexer, Parser, AST, Compilation & Opcode e Zend VM** para fazer o PHP aceitar uma nova sintaxe que gera array em sequências númericas, exemplo:
