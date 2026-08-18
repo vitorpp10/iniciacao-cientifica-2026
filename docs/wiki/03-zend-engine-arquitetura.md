@@ -117,7 +117,7 @@ Para o PHP aceitar essa nova estrutura de árvore, precisamos abrir o arquivo `Z
 ZEND_AST_RANGE,
 ```
 
-A partir de agora, ao rodar `1 |> 2;`, o código **não vai mais dar erro de sintaxe**. Agora o Lexer lê, o Parser valida a gramática, o AST monta o mapa visual porém o motor ainda não sabe oque fazer na hora de executar, que seria  fase de compilação/Zend VM, fazendo a compilação travar até o momento.
+A partir de agora, ao rodar `1 |> 2;`, o código **não vai mais dar erro de sintaxe**. Agora o Lexer lê, o Parser valida a gramática, o AST monta o mapa visual porém o motor ainda não sabe oque fazer na hora de executar, que seria fase de compilação/Zend VM, fazendo a compilação travar até o momento.
 
 ## Compilation
 
@@ -188,3 +188,109 @@ Isso seria um pseudo-macro onde o arquivo `Zend/zend_vm_gen.php` vai ler o arqui
 * `ZEND_RANGE`: Nome do **opcode**/instrução.
 * `CONST|TMP|VAR|CV`: Os tipos possíveis de dados que pode aparecer no `op1` (Esquerda).
 * `CONST|TMP|VAR|CV`: Mesma coisa, tipos possíveis porém para o outro lado `op2` (Direita).
+
+Logo após assinatura do handler, antes de testarmos os casos que podem ocorrer para cada tipo recebido de ambos os parâmetros, a Zend VM precisa fazer uma etapa de preparação e captura de dados. O código realiza isso através do seguinte trecho:
+
+```c
+USE_OPLINE 
+zend_free_op free_op1, free_op2;
+zval *op1, *op2, *result, tmp;
+
+SAVE_OPLINE();
+op1 = GET_OP1_ZVAL_PTR_DEREF(BP_VAR_R);
+op2 = GET_OP2_ZVAL_PTR_DEREF(BP_VAR_R);
+result = EX_VAR(opline->result.var);
+```
+
+Oque esse trecho inicial faz:
+
+**USE_OPLINE e SAVE_OPLINE()**: Ativam e salvam o ponteiro da linha de instrução atual que a VM está executando para o C saber onde olhar o script PHP.
+
+**zend_free_op free_op1, free_op2**: Cria variáveis de controle de memória. Elas servem para registrar se os valores passados são temporários para apagar eles depois manualmente (Garbage Collector).
+
+**zval *op1, *op2, *result, tmp**: Aloca os ponteiros dos contêineres de dados do PHP (`zval`). O `op1` representa o valor da esquerda, o `op2` representa o da direita, `result` guardará a array final e `tmp` será um valor temporário para cálculos.
+
+**GET_OP1_ZVAL_PTR_DEREF...**: Essas macros vão até a memória da VM, pegam os valores que o usuário digitou no PHP (ex: o `1` e o `10` de `1 |> 10`) e os entrega mastigados para os nossos ponteiros `op1` e `op2`.
+
+Após a criação e alocação de valores, vamos tratar dos vários casos que podem ocorrer ao ler os parâmetros.
+
+O código vai chamar a função `Z_TYPE_P()` que serve para ler os dois operadores `op1` e `op2` para descobrir se oque está checando é válido ou não, dentro dessa função vai ser feito os seguintes passos:
+
+1. Ambos são inteiros:
+
+Se ambos forem inteiros (`IS_LONG`), escrevemos usando uma macro em C `Z_LVAL_P` (LVAL = Long Value) para valores inteiros.
+
+Como o operador do autor foi projetado para ser um gerador de range exclusivamente crescente, o `op1` não pode ser maior que o `op2`, ou seja, vamos comparar `min` e `max`, onde `min` é o valor da esquerda e `max` o da direita. Logo, se `min > max`, quer dizer que não está em ordem crescente e a regra gramatical do operador foi quebrada, então retornamos erro com a função `zend_throw_error()` e pulamos a função `HANDLE_EXCEPTION()`.
+
+Se não tiver com erro vamos fazer `max - min` para calcular o tamanho e ver se não passa do limite de memória do PHP (`HT_MAX_SIZE`), se tudo estiver certo incrementamos o tamanho em 1.
+
+2. Floats com Inteiros:
+
+Se tivermos floats no meio, o tratamento muda. O autor usa `long double` no C para armazenar os valores.
+
+Usamos `long double` pois um simples `double` tem apenas 53 bits de precisão e pode perder dados ao converter ou misturar um inteiro muito grande. O `long double` garante segurança total. Extraímos os valores usando `Z_DVAL_P` (DVAL = Double Value).
+
+3. Tipos não suportados (Else):
+
+Se o usuário tentar fazer algo como `"texto" |> "texto"`, o código cai no else final e dispara uma exceção informando que os operadores usados não são suportados.
+
+Uma vez que validamos os números e sabemos o tamanho da array, agora precisamos criá-lo. Arrays no PHP por baixo dos panos são chamadas de HashTables.
+
+```c
+Z_TYPE_INFO(tmp) = IS_LONG
+array_init_size(result, size);
+zend_hash_real_init(Z_ARRVAL_P(result), 1);
+```
+
+**Z_TYPE_INFO(tmp) = IS_LONG**: Define o tipo da variável temporária
+
+**array_init_size(result, size)**: Define que o tamanho da array resultado vai ser esse.
+
+**zend_hash_real_init(Z_ARRVAL_P(result), 1)**: Inicializa o hash table. O número 1 aqui é um detalhe crucial, ele diz ao PHP para criar uma Packed HashTable.
+
+**Packed HashTable** é uma otimização em grande escala que ao invés de criar um array associativo pesado, ele cria uma array C real (chaves numéricas sequenciais e ordenadas), que gasta muito menos memória e é bem mais rápida.
+
+Para preencher essa Array usamos um laço de repetição otimizado:
+
+```c
+ZEND_HASH_FILL_PACKED(Z_ARRVAL_P(result)) {
+    for (i = 0; i < size; ++i) {
+        Z_LVAL(tmp) = min + i;
+        ZEND_HASH_FILL_ADD(&tmp); 
+    }
+} ZEND_HASH_FILL_END();
+```
+
+As macros `ZEND_HASH_FILL_PACKED` e `ZEND_HASH_FILL_END` delimitam um ambiente de inserção rápida na memória do nosso array (`result`). Dentro desse bloco, executamos um laço for padrão do C que roda o número exato de vezes correspondente ao tamanho calculado.
+
+A cada iteração, o código realiza duas ações:
+
+- Ele calcula o número atual fazendo `min + i` (o valor inicial mais o índice da volta atual) e injeta esse valor na variável `tmp` (temporário).
+
+- A macro `ZEND_HASH_FILL_ADD(&tmp)` copia esse valor diretamente para dentro do bloco de memória sequencial do array e, de forma automática, avança o ponteiro interno para a próxima posição livre da memória.
+
+No final do handler, o C faz o encerramento:
+
+```c
+FREE_OP1();
+FREE_OP2();
+ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
+```
+
+**FREE_OP...**: Se as variáveis `free_op1` e `free_op2`, forem valores temporários criados apenas para essa conta (`IS_TMP_VAR`), isso apaga elas da memória (Garbage Collection manual).
+
+**ZEND_VM_NEXT_OPCODE**: Diz para a máquina virtual que o código foi finalizado e não houve erros, assim continuando para próximos scripts de usuários.
+
+Com o código C escrito no arquivo, precisamos rodar o script gerador da VM no terminal:
+
+```bash 
+php Zend/zend_vm_gen.php
+```
+
+Isso lê o nosso cabeçalho e gera todas as variações da nossa função dentro do arquivo `zend_vm_opcodes.c`. Depois é só recompilar o PHP usando o comando `make`.
+
+Embora o operador agora funcione se o usuário escrever algo como `assert(1 |> 2);`, o PHP vai retornar *Segmentation Fault* e travar. Quando um assert falha, o PHP tenta ler a AST de trás para frente para transformar o código de volta em texto (String) para mostrar na mensagem de erro, isso se chama **Pretty Printer**. Como ele não conhece o nosso operador, ele quebra.
+
+Precisamos ir no arquivo `Zend/zend_ast.c`, procurar a função que exporta strings (`zend_ast_export_ex`) e ensinar a ela que o nosso nó `ZEND_AST_RANGE` deve ser impresso na tela como `" |> "`, com a mesma prioridade que definimos no Parser.
+
+Com isso fechamos todo o ciclo de como um novo operador é criado de forma funcional em cada etapa do sistema interno do PHP para aceitar novas variáveis.
