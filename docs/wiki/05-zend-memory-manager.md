@@ -40,3 +40,90 @@ pefree(ptr, 1)
 pestrdup(str, 1)
 ```
 
+
+## Chunks, Pages e Bins
+
+Para evitar o custo de solicitar memória ao Sistema Operacional a cada variável, o ZendMM aloca blocos gigantes de memória de uma vez e gerencia a separação internamente. A estrutura por trás disso é a `_zend_mm_heap`.
+
+Ela gerencia o estado global do alocador, sabe quais partes dos grandes blocos (chunks) estão livres para serem usados e onde alocar novos espaços. Conceitualmente, sua hierarquia é dividida assim:
+
+```
+_zend_mm_heap
+ ├── main_chunk      (O bloco principal de trabalho atual)
+ ├── cached_chunks   (Blocos mantidos vivos entre requisições)
+ ├── huge_list       (Lista para alocações absurdamente grandes)
+ └── free_slots[BIN] (Compartimentos para pequenos pedaços)
+```
+
+Para organizar essa memória, o ZendMM divide as alocações em três subníveis físicos: Chunks, Pages e Bins.
+
+### Chunks e Pages
+
+Uma Chunk é um bloco contíguo de 2 MiB que serve para facilitar a contabilidade de espaço. O ZendMM divide esse Chunk em Pages de 4 KiB (4096 bytes) cada.
+
+A alocação funciona assim:
+
+- 1 Chunk = 2 MiB = 2.097.152 bytes
+- 1 Page = 4 KiB = 4.096 bytes
+- Total: 2.097.152 / 4096 = 512 pages por Chunk.
+
+A primeira página de cada Chunk é reservada para os metadados do próprio bloco. Quando o motor pede, por exemplo, um `emalloc(12000)`, o ZendMM divide isso em 3 páginas contíguas para satisfazer a alocação:
+
+`12000 / 4096 ≃ 2,93`.
+
+Para localizar essas páginas livres rapidamente, o Chunk utiliza dois mapas nos seus metadados:
+
+**`free_map`**: Um mapa de 512 bits onde cada bit (0 ou 1) representa se a página está livre ou ocupada.
+
+**`map`**: Um array que descreve o que exatamente está armazenado em cada página ocupada.
+
+### Bins
+
+Gastar uma página inteira de 4096 bytes para alocar uma string de 24 bytes causaria um desperdício massivo. A Bin foi criada para resolver este problema.
+
+Um Bin permite que várias alocações pequenas compartilhem uma mesma Page. O ZendMM possui 30 classes de Bins predefinidas, com tamanhos exatos: 8, 16, 24, 32... até 3072 bytes.
+
+Se o PHP precisa criar um objeto de 32 bytes, a página de 4096 bytes é fatiada da seguinte forma:
+
+``` 
+Page de 4096 bytes
+
+┌────32────┐
+│ slot     │
+├────32────┤
+│ slot     │
+├────32────┤
+│ slot     │
+├────32────┤
+│ slot     │
+│ ...      │
+└──────────┘
+``` 
+
+Isso permite que uma única página acomode 128 variáveis de 32 bytes de forma perfeitamente organizada, facilitando a reutilização de slots assim que elas não são mais usadas.
+
+Essa arquitetura de compartimentos de tamanhos fixos introduz um conceito chamado **fragmentação interna**.
+
+Se o motor solicitar `emalloc(2000)`, o ZendMM não criará um slot exato de 2000 bytes. Ele encaixará essa variável no Bin de 2048 bytes. Os 48 bytes que vão sobrar ficarão inutilizados. O motor aceita esse pequeno desperdício de RAM em troca de não gastar ciclos de CPU calculando e reajustando ponteiros matematicamente dinâmicos.
+
+### Três Categorias de Alocação
+
+Com essa arquitetura, toda vez que o PHP chama `emalloc()`, o tamanho do dado define seu caminho físico imediato:
+
+```
+emalloc(size)
+     │
+     ├── ≤ 3072 B
+     │      ↓
+     │     BIN (Alocação Pequena - Fatias dentro de uma Page)
+     │
+     ├── > 3072 B (E menor que 2 MiB)
+     │      ↓
+     │    PAGES (Alocação Grande - Múltiplas Pages contíguas do Chunk)
+     │
+     └── Grande demais para um Chunk
+            ↓
+          mmap() (Alocação Enorme - Pedido direto ao SO)
+            ↓
+        huge_list
+``` 
