@@ -28,8 +28,8 @@ Enquanto o OPCache para na entrega dos opcodes, o JIT tenta evitar parte do cust
 
 No entanto, o JIT não compila o script inteiro às cegas. Ele possui regras estritas de funcionamento baseadas em observações:
 
-- Hot code: É o trecho de códgio que é executado com frequência suficiente para que o custo de otimizá-lo compense. O JIT só acelera o que está efetivamente rodando repetidas vezes e que ele consiga otimizar.
+- Hot code: É o trecho de código que é executado com frequência suficiente para que o custo de otimizá-lo compense. O JIT só acelera o que está efetivamente rodando repetidas vezes e que ele consiga otimizar.
 
-- Tracing JIT: É a estratpegia que observa ativamente os "caminhos" de execução do código. Quando o Tracing JIT percebe que certas funções ou caminhos executados pela Zend VM aparecem muitas vezes, ele extrai esse caminho e o compila para código nativo.
+- Tracing JIT: É a estratégia que observa ativamente os "caminhos" de execução do código. Quando o Tracing JIT percebe que certas funções ou caminhos executados pela Zend VM aparecem muitas vezes, ele extrai esse caminho e o compila para código nativo.
 
 - Warm-up: É o tempo de "aquecimento". Representa a janela de tempo entre as execuções iniciais do código até o momento em que o Tracing JIT identifica que a repetição é alta o suficiente para valer a pena convertê-lo. Durante a warm-up, o código continua rodando de forma interpretada.
