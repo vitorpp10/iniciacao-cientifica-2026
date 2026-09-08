@@ -1,8 +1,6 @@
 # IC : Otimização via Extensões C++
 
 **Pesquisa:** Otimização de Performance em Sistemas de Gestão Pública via Módulos C++: Um Estudo de Caso no Ecossistema SEI  
-**Autor:** Vitor Pádua Moreira Justo            
-**Orientador:** Prof. Auto Tavares  
 **Instituição:** CEUB (Programa de Iniciação Científica - PIC 2026/2027)  
 
 ## Objetivo
